@@ -1,1 +1,1 @@
-{"framework":null,"outputDirectory":"public","functions":{"api/coach.js":{"maxDuration":30}},"headers":[{"source":"/api/(.*)","headers":[{"key":"Cache-Control","value":"no-store"}]}]}
+{"framework":null,"outputDirectory":"public","functions":{"api/*.js":{"maxDuration":30}},"headers":[{"source":"/api/(.*)","headers":[{"key":"Cache-Control","value":"no-store"}]}]}
