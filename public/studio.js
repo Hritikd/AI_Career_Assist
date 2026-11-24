@@ -20,7 +20,12 @@ function node(tag,text,cls){const n=document.createElement(tag);n.textContent=te
 function control(text,fn,cls='secondary'){const b=node('button',text,cls);b.type='button';b.onclick=fn;return b}
 function bubble(role,text,evidence){
   const b=node('div','','bubble'+(role==='user'?' me':''));b.append(node('b',role==='user'?'You':'Mira'),document.createTextNode(text));
-  if(evidence)b.append(node('blockquote',evidence));return b;
+  if(evidence)b.append(node('blockquote',evidence));
+  if(role==='assistant' && text!==greetings[state.language][0]){
+    b.append(document.createElement('br'),control('Use as next step',()=>{
+      state.suggested=text.slice(0,800);save();draw();const editor=el('actionBox').querySelector('textarea');editor?.focus();
+    },'text'));
+  }return b;
 }
 function draw(){
   const feed=el('feed');feed.replaceChildren(bubble('assistant',greetings[state.language][0]),...state.turns.map(t=>bubble(t.role,t.text,t.evidence)));
