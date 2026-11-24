@@ -7,7 +7,7 @@ A mobile-friendly career workshop for someone with a real opening in mind. Paste
 
 ## Run
 
-Node 20 or later. Run `npm test`, then `npm run dev` and visit http://localhost:3000. No dependencies. Set SARVAM_API_KEY in the server environment for live coaching. Optionally set SARVAM_MODEL. Never place the key in public files. Without the key or on provider failure the interface labels the guided fallback on each reply.
+Node 20 or later. Run `npm test`, then `npm run dev` and visit http://localhost:3000. No dependencies. Set SARVAM_API_KEY in the server environment for live coaching. Optionally set SARVAM_MODEL. Never place the key in public files. When neither provider is available or on provider failure the interface labels the guided fallback on each reply.
 
 ## Vercel
 
@@ -15,4 +15,4 @@ Import this repository as a new project using the Other preset. The public direc
 
 ## Demo
 
-Choose the customer support sample. Enter “I have handled complaints at a shop. Day shifts only.” Inspect the cited night-shift requirement. Save a recruiter question or practise a complaint scenario. Ask “Can I use my shop experience?” Revise the draft, save a next action, refresh, and mark it complete. Data is saved on this device. AI requests transmit the posting and candidate inputs to Sarvam. No outbound messaging or job application is sent.
+Choose the customer support sample. Enter “I have handled complaints at a shop. Day shifts only.” Inspect the cited night-shift requirement. Save a recruiter question or practise a complaint scenario. Ask “Can I use my shop experience?” Revise the draft, save a next action, refresh, and mark it complete. Data is saved on this device. AI requests transmit the posting and candidate inputs to the active provider (Sarvam when configured, otherwise Vercel AI Gateway on Vercel). No outbound messaging or job application is sent.
