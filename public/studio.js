@@ -32,6 +32,7 @@ function draw(){
   const box=el('actionBox');box.replaceChildren();
   if(state.action){
     box.append(node('p',state.action),control(state.done?'Reopen action':'Mark complete',()=>{state.done=!state.done;save();draw()}));
+    box.append(control('Copy action',async()=>{try{await navigator.clipboard.writeText(state.action);sayStatus('Action copied.')}catch{sayStatus('Select the action text to copy it.')}}));
     if(state.done)box.append(node('small','Completed'));
   }
   if(state.suggested && state.suggested!==state.action){
@@ -148,6 +149,9 @@ function paintMarket(){
       const context=listingText(item.id)+(item.id==='excel'?'\nPractice exercise: '+drill:item.id==='ops'?'\nFree alternative: '+listingText('excel'):'');
       openCoach(context,item.title+' · '+(item.kind==='jobs'?'Interview rehearsal':'Learning'),prompt);
     },'secondary'));
+    if(item.id==='ops')actions.append(control('Prepare a counsellor question',()=>{
+      openCoach(listingText('ops')+'\nOther option: '+listingText('excel'),'Learning · Counsellor preparation','Help me prepare one question for a counsellor before I spend ₹4,800. Use what I have told you and give me a message I can save.');
+    },'chip'));
     card.append(more,actions);listings.append(card);
   }
   const host=el('touchpoint');host.replaceChildren();
