@@ -28,6 +28,10 @@ export function task(job){const text=job.toLowerCase();
 export function review(draft){
  const quote=lines(draft)[0]||draft;
  if(/^(?:i don.t know|idk|not sure|no idea)[.! ]*$/i.test(draft.trim()))return {title:'Start with a smaller step',quote,body:'Choose one record, person, or tool you would check first. Write one sentence explaining what you hope to learn.'};
+ if(/look at (?:the )?logs|check (?:the )?(?:logs|ticket|records|tracker)/i.test(draft)){
+ const hasTime=/by (?:noon|midnight|end of day|[0-9])|in \d+ (?:minutes|hours)/i.test(draft);
+ return {title:'Specify what you would check',quote,body:(hasTime?'You gave a time for the update. ':'')+'Which field or entry would you inspect first, and what finding would change your next step?'};
+ }
  return {title:'Make your answer easier to verify',quote,body:'Read this sentence back. Which detail could a teammate verify? Add a specific check, the person you would update, or how you would know the issue was resolved. Keep only details that are true.'}
 }
 export function localReply(q,s){
