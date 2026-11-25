@@ -1,3 +1,4 @@
+import {voiceSession} from './voice-session.js';
 import {catalog,listingText,compareText,drill} from './market.js';
 import {samples} from './guide.js';
 
@@ -7,7 +8,7 @@ const greetings = {
   'hi-IN': ['नमस्ते, मैं मीरा हूँ। आज काम या करियर के बारे में क्या बात करना चाहेंगे?', 'मुझे काम बदलना है', 'इंटरव्यू की प्रैक्टिस करें', 'क्या यह नौकरी मेरे लिए सही है?'],
   'kn-IN': ['ನಮಸ್ಕಾರ, ನಾನು ಮೀರಾ. ಇಂದು ನಿಮ್ಮ ಕೆಲಸದ ಬಗ್ಗೆ ಏನು ಮಾತನಾಡಲು ಬಯಸುತ್ತೀರಿ?', 'ಬೇರೆ ಕೆಲಸ ಹುಡುಕುತ್ತಿದ್ದೇನೆ', 'ಸಂದರ್ಶನ ಅಭ್ಯಾಸ ಮಾಡೋಣ', 'ಈ ಕೆಲಸ ನನಗೆ ಸರಿಹೊಂದುತ್ತದೆಯೇ?']
 };
-const blank = () => ({language:'en-IN',turns:[],opening:'',action:'',done:false,suggested:'',draft:'',shortlist:[],surface:'jobs',contextName:'',dismissed:''});
+const blank = () => ({language:'en-IN',turns:[],opening:'',action:'',done:false,suggested:'',draft:'',shortlist:[],surface:'jobs',contextName:'',dismissed:'',jobNotes:{}});
 const caseMode = location.pathname.replace(/\/$/, '') === '/apna';
 const storageKey = caseMode ? 'daystep.shortlist-case' : 'daystep.studio';
 function initialState(){
@@ -25,7 +26,7 @@ try {
   const stored = JSON.parse(localStorage.getItem(storageKey));
   if(stored && greetings[stored.language] && Array.isArray(stored.turns)) state = {...state,...stored};
 } catch {}
-let busy=false, recorder=null, timer, voiceMode=false, playback=0, failed=false;
+let busy=false, voiceMode=false, playback=0, failed=false;
 function save(){try{localStorage.setItem(storageKey,JSON.stringify(state))}catch{el('live').textContent='This browser could not save your conversation.'}}
 function sayStatus(text){el('live').textContent=text}
 function node(tag,text,cls){const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n}
@@ -54,19 +55,35 @@ function draw(){
   }
   if(state.suggested && state.suggested!==state.action){
     const note=node('textarea','');note.value=state.suggested;note.maxLength=800;note.setAttribute('aria-label','Edit suggested next step');
-    box.append(node('p','Mira’s suggestion'),note,control('Save this step',()=>{if(!note.value.trim())return;state.action=note.value.trim();state.suggested='';state.done=false;save();draw();sayStatus('Your next step is saved on this device.')}));
+    const jobs=catalog.filter(i=>i.kind==='jobs'&&state.opening.includes(i.title));
+    const target=node('select','');target.setAttribute('aria-label','Attach next step to an opening');
+    target.append(new Option('Personal next step',''));
+    for(const job of jobs)target.append(new Option(job.title,job.id));
+    if(jobs.length===1)target.value=jobs[0].id;
+    box.append(node('p','Mira’s suggestion'),note);
+    if(jobs.length)box.append(node('small','Save with an opening'),target);
+    box.append(control('Save this step',()=>{
+      if(!note.value.trim())return;
+      state.action=note.value.trim();state.suggested='';state.done=false;
+      if(target.value){
+        state.jobNotes[target.value]={question:state.action,answer:''};
+        if(!state.shortlist.includes(target.value))state.shortlist.push(target.value);
+      }
+      save();draw();sayStatus(target.value?'Saved on the opening in My shortlist.':'Your next step is saved on this device.');
+    }));
   }else if(!state.action)box.append(node('p','When you find something worth trying, you can save it here and come back to it.'));
   if(caseMode)paintCasePrompts();
   el('contextTag').hidden=!state.contextName;el('contextTag').textContent=state.contextName;el('retry').hidden=!failed;paintMarket();lock(busy);
 }
 function lock(on){
-  busy=on;const capturing=Boolean(recorder);
+  busy=on;const capturing=handsFree.active;
   for(const id of ['send','lang','discuss','restart','listen','sample','posting','message']) el(id).disabled=on||capturing;
   el('mic').disabled=on&&!capturing;
+  el('retry').disabled=on||capturing;
   for(const b of document.querySelectorAll('#starters button,#casePrompts button,.market button')) b.disabled=on||capturing;
 }
-async function api(route,data){
-  const response=await fetch('/api/'+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(28000)});
+async function api(route,data,options={}){
+  const response=await fetch('/api/'+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:options.signal ? AbortSignal.any([options.signal,AbortSignal.timeout(28000)]) : AbortSignal.timeout(28000)});
   const result=await response.json();if(!response.ok)throw Error(result.error||'Try again.');return result;
 }
 function stopAudio(){playback++;el('player').pause();el('player').hidden=true;document.body.classList.remove('speaking')}
@@ -79,19 +96,21 @@ async function hear(text){
   }catch{if(id===playback)sayStatus('Audio is unavailable. You can still read and reply.')}
 }
 el('player').onended=()=>{document.body.classList.remove('speaking');sayStatus('Your turn.')};
-async function send(text,retry=false){
-  if(busy||recorder||!text.trim())return;
+async function send(text,retry=false,voiceOptions=null){
+  if((!voiceOptions&&(busy||handsFree.active))||!text.trim())return;
   stopAudio();if(!retry)state.turns.push({role:'user',text:text.trim().slice(0,1500)});
   state.draft='';failed=false;save();lock(true);draw();sayStatus('Mira is thinking…');
   try{
     const tail=state.turns.slice(-20).map(({role,text})=>({role,text}));
     const first=state.turns[0];
     if(state.turns.length>20 && first.role==='user')tail.unshift({role:'user',text:first.text});
-    const data=await api('conversation',{turns:tail,opening:state.opening,language:state.language,action:state.action});
+    const data=await api('conversation',{turns:tail,opening:state.opening,language:state.language,action:state.action},voiceOptions||{});
+    if(voiceOptions?.signal.aborted)return;
     state.turns.push({role:'assistant',text:data.reply,evidence:data.evidence});state.suggested=data.action||'';
     save();lock(false);draw();sayStatus('Your turn.');
+    if(voiceOptions)return data.reply;
     if(voiceMode)await hear(data.reply);
-  }catch{failed=true;lock(false);draw();sayStatus('Mira couldn’t finish. Retry your saved message or send a correction.')}
+  }catch{if(voiceOptions?.signal.aborted)return;failed=true;lock(false);draw();sayStatus('Mira couldn’t finish. Retry your saved message or send a correction.');if(voiceOptions)throw Error('Voice turn failed')}
 }
 el('retry').onclick=()=>send(state.turns.at(-1).text,true);
 el('composer').onsubmit=e=>{e.preventDefault();send(el('message').value)};
@@ -104,30 +123,27 @@ el('sample').onchange=e=>{if(e.target.value!==''){state.opening=samples[Number(e
 el('posting').oninput=e=>{state.opening=e.target.value;save()};
 el('discuss').onclick=()=>{if(state.opening.trim().length<20){sayStatus('Add a job description first.');return}send(greetings[state.language][3])};
 el('restart').onclick=()=>{if(!confirm('Clear this conversation and saved action on this device?'))return;stopAudio();state=initialState();voiceMode=false;failed=false;el('sample').value='';save();draw();sayStatus('Ready for a new conversation.')};
-el('mic').onclick=async()=>{
-  if(recorder){if(recorder.state==='recording')recorder.stop();return}
-  if(busy)return;stopAudio();lock(true);let stream;
-  try{
-    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)throw Error();
-    stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    const mime=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(m=>MediaRecorder.isTypeSupported(m));
-    recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);
-    const chunks=[],format=recorder.mimeType.split(';')[0];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
-    recorder.onstop=async()=>{
-      clearTimeout(timer);stream.getTracks().forEach(t=>t.stop());recorder=null;lock(true);document.body.classList.remove('recording');el('mic').textContent='Speak to Mira';sayStatus('Listening back…');
-      try{
-        const blob=new Blob(chunks,{type:format});const data=await new Promise((resolve,reject)=>{const f=new FileReader();f.onload=()=>resolve(f.result.split(',')[1]);f.onerror=reject;f.readAsDataURL(blob)});
-        const {text}=await api('voice',{operation:'listen',language:state.language,audio:data,mime:format});
-        lock(false);voiceMode=true;state.draft=text.slice(0,1500);save();el('message').value=state.draft;el('message').focus();sayStatus('Check the transcript, then tap Send. Mira will reply aloud.');
-      }catch{lock(false);sayStatus('Couldn’t transcribe that. Try a shorter recording or type your reply.')}
-    };
-    recorder.start();lock(false);voiceMode=true;document.body.classList.add('recording');el('mic').textContent='Finish speaking';sayStatus('Listening for up to 25 seconds. Tap Finish speaking to review your words.');timer=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},25000);
-  }catch{stream?.getTracks().forEach(t=>t.stop());recorder=null;lock(false);sayStatus('Microphone unavailable. Allow microphone access in your browser or type your reply.')}
+const handsFree=voiceSession({
+  api,language:()=>state.language,status:sayStatus,
+  onTurn:(text,options)=>send(text,false,options),
+  onState:on=>{
+    voiceMode=false;
+    el('mic').textContent=on?'End voice chat':'Speak to Mira';
+    el('talkNow').textContent=on?'End voice chat':'Speak with Mira';
+    document.body.classList.toggle('recording',on);
+    lock(on);
+  }
+});
+el('mic').onclick=()=>{
+  if(handsFree.active){handsFree.end('Voice chat ended.');return}
+  if(!busy){stopAudio();handsFree.start()}
 };
+window.addEventListener('pagehide',()=>handsFree.end('Voice chat ended.'));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)handsFree.end('Voice paused while this tab is hidden.')});
 failed=state.turns.at(-1)?.role==='user';
 
 async function sampleVoice(){
-  if(busy || recorder)return;
+  if(busy || handsFree.active)return;
   stopAudio();lock(true);sayStatus('Preparing a sample voice note…');
   const demo={'en-IN':'I work in a shop in Bengaluru. I like solving problems, but I want fewer customer calls. What job could I try?', 'hi-IN':'मैं एक दुकान में काम करता हूँ। मुझे समस्याएँ सुलझाना पसंद है लेकिन मैं ग्राहकों के कम कॉल लेना चाहता हूँ। कौन सा काम आज़माऊँ?', 'kn-IN':'ನಾನು ಬೆಂಗಳೂರಿನ ಒಂದು ಅಂಗಡಿಯಲ್ಲಿ ಕೆಲಸ ಮಾಡುತ್ತೇನೆ. ಸಮಸ್ಯೆಗಳನ್ನು ಪರಿಹರಿಸಲು ಇಷ್ಟ, ಆದರೆ ಗ್ರಾಹಕರ ಕರೆಗಳು ಕಡಿಮೆ ಇರಬೇಕು. ಯಾವ ಕೆಲಸ ಪ್ರಯತ್ನಿಸಬಹುದು?'};
   try{
@@ -139,7 +155,7 @@ async function sampleVoice(){
 }
 
 function openCoach(context,name,prompt){
-  if(busy||recorder)return;
+  if(busy||handsFree.active)return;
   state.opening=context;state.contextName=name;save();
   el('coachPanel').scrollIntoView({behavior:'smooth',block:'start'});
   send(prompt);
@@ -183,7 +199,20 @@ function paintMarket(){
     if(item.id==='ops')actions.append(control('Prepare a counsellor question',()=>{
       openCoach(listingText('ops')+'\nOther option: '+listingText('excel'),'Learning · Counsellor preparation','Help me prepare one question for a counsellor before I spend ₹4,800. Use what I have told you and give me a message I can save.');
     },'chip'));
-    card.append(more,actions);listings.append(card);
+    card.append(more,actions);
+    const saved=state.jobNotes[item.id];
+    if(saved){
+      const followup=node('details','');followup.append(node('summary','My follow-up'),node('p',saved.question));
+      const answer=node('textarea','');answer.maxLength=800;answer.value=saved.answer;
+      answer.placeholder='What did the recruiter say?';answer.setAttribute('aria-label','Recruiter reply for '+item.title);
+      answer.oninput=()=>{saved.answer=answer.value;save()};
+      followup.append(answer,control('Recheck this opening',()=>{
+        if(!answer.value.trim()){answer.focus();return}
+        openCoach(listingText(item.id),item.title+' · Recruiter follow-up','I asked: '+saved.question.slice(0,400)+' My note from the recruiter: '+answer.value.trim()+'. Recheck this opening against my priorities. Distinguish my note from the published listing.');
+      },'secondary'));
+      card.append(followup);
+    }
+    listings.append(card);
   }
   const host=el('touchpoint');host.replaceChildren();
   const jobIds=ids.filter(id=>catalog.some(i=>i.id===id&&i.kind==='jobs'));
@@ -219,4 +248,4 @@ function makeReviewLinks(){
 }
 draw();
 
-el('talkNow').onclick=()=>{el('coachPanel').scrollIntoView({block:'start'});if(!busy&&!recorder)el('mic').click()};
+el('talkNow').onclick=()=>{el('coachPanel').scrollIntoView({block:'start'});if(!busy||handsFree.active)el('mic').click()};

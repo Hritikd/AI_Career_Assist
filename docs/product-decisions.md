@@ -23,6 +23,9 @@
 **Illustrative unit economics.** Suppose 30% of eligible visitors start, a voice session costs ₹2 including recognition, generation and synthesis, and one incremental qualified application contributes ₹100. Break-even is a 0.6 percentage-point lift per eligible visitor before fixed costs. Track speech minutes, tokens, redos and paid conversions against a holdout. These figures are assumptions, not Apna economics.
 
 ## Iteration evidence and field test
-Prototype walkthroughs exposed a three-click path to comparison, a Kannada transcription error, a coaching reply that overlooked a promised noon update, and a useful recruiter question without a save affordance. The submission now opens a prefilled shortlist, microphone transcripts are editable, the rehearsal prompt asks one grounded follow-up, and any reply can become an editable action. These observations came from prototype tests. Candidate interviews are pending.
+Prototype walkthroughs exposed a three-click path to comparison, a Kannada transcription error, a coaching reply that overlooked a promised noon update, and a useful recruiter question without a save affordance. The submission now opens a prefilled shortlist, voice turns advance automatically and the candidate can correct a transcript in the next turn, the rehearsal prompt asks one grounded follow-up, and any reply can become an editable action. These observations came from prototype tests. Candidate interviews are pending.
 
 Recruit five early-career workers with two actual openings. Capture their intended next action before the session, observe whether they correct the coach and explain their decision afterward, and ask one week later which action they took. Use a randomized pilot to estimate incremental impact.
+
+
+A candidate can attach an edited question to a specific shortlisted opening. When the recruiter replies, the candidate records the answer on that listing and asks Mira to reassess it alongside the published terms. The recruiter reply is user-entered and is never presented as a verified employer update.
