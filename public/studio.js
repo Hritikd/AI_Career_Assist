@@ -8,13 +8,25 @@ const greetings = {
   'kn-IN': ['ನಮಸ್ಕಾರ, ನಾನು ಮೀರಾ. ಇಂದು ನಿಮ್ಮ ಕೆಲಸದ ಬಗ್ಗೆ ಏನು ಮಾತನಾಡಲು ಬಯಸುತ್ತೀರಿ?', 'ಬೇರೆ ಕೆಲಸ ಹುಡುಕುತ್ತಿದ್ದೇನೆ', 'ಸಂದರ್ಶನ ಅಭ್ಯಾಸ ಮಾಡೋಣ', 'ಈ ಕೆಲಸ ನನಗೆ ಸರಿಹೊಂದುತ್ತದೆಯೇ?']
 };
 const blank = () => ({language:'en-IN',turns:[],opening:'',action:'',done:false,suggested:'',draft:'',shortlist:[],surface:'jobs',contextName:'',dismissed:''});
-let state = blank();
+const caseMode = location.pathname.replace(/\/$/, '') === '/apna';
+const storageKey = caseMode ? 'daystep.shortlist-case' : 'daystep.studio';
+function initialState(){
+  const base=blank();
+  if(caseMode)Object.assign(base,{shortlist:['dispatch','support'],opening:compareText(['dispatch','support']),contextName:'Two saved jobs in Bengaluru',surface:'saved'});
+  return base;
+}
+if(caseMode){
+  greetings['en-IN'][0]='You’ve saved dispatch and customer support. Which matters more in your next job: predictable hours, the kind of work, or something else?';
+  greetings['hi-IN'][0]='आपने डिस्पैच और कस्टमर सपोर्ट की नौकरियाँ चुनी हैं। आपके लिए तय समय ज़्यादा ज़रूरी है, काम का प्रकार, या कुछ और?';
+  greetings['kn-IN'][0]='ನೀವು ಡಿಸ್ಪ್ಯಾಚ್ ಮತ್ತು ಗ್ರಾಹಕ ಬೆಂಬಲದ ಕೆಲಸಗಳನ್ನು ಉಳಿಸಿದ್ದೀರಿ. ನಿಮಗೆ ನಿಗದಿತ ಸಮಯ ಮುಖ್ಯವೇ, ಕೆಲಸದ ಸ್ವರೂಪವೇ ಅಥವಾ ಬೇರೆ ಏನಾದರೂ?';
+}
+let state = initialState();
 try {
-  const stored = JSON.parse(localStorage.getItem('daystep.studio'));
+  const stored = JSON.parse(localStorage.getItem(storageKey));
   if(stored && greetings[stored.language] && Array.isArray(stored.turns)) state = {...state,...stored};
 } catch {}
 let busy=false, recorder=null, timer, voiceMode=false, playback=0, failed=false;
-function save(){try{localStorage.setItem('daystep.studio',JSON.stringify(state))}catch{el('live').textContent='This browser could not save your conversation.'}}
+function save(){try{localStorage.setItem(storageKey,JSON.stringify(state))}catch{el('live').textContent='This browser could not save your conversation.'}}
 function sayStatus(text){el('live').textContent=text}
 function node(tag,text,cls){const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n}
 function control(text,fn,cls='secondary'){const b=node('button',text,cls);b.type='button';b.onclick=fn;return b}
@@ -31,8 +43,8 @@ function draw(){
   const feed=el('feed');feed.replaceChildren(bubble('assistant',greetings[state.language][0]),...state.turns.map(t=>bubble(t.role,t.text,t.evidence)));
   feed.scrollTop=feed.scrollHeight;
   const starts=el('starters');starts.replaceChildren();starts.className='chips';
-  if(!state.turns.length)for(const prompt of greetings[state.language].slice(1))starts.append(control(prompt,()=>send(prompt),'chip'));
-  if(!state.turns.length)starts.append(control('Try a sample voice note',sampleVoice,'chip'));
+  if(!caseMode && !state.turns.length)for(const prompt of greetings[state.language].slice(1))starts.append(control(prompt,()=>send(prompt),'chip'));
+  if(!caseMode && !state.turns.length)starts.append(control('Try a sample voice note',sampleVoice,'chip'));
   el('lang').value=state.language;el('posting').value=state.opening;el('message').value=state.draft;
   const box=el('actionBox');box.replaceChildren();
   if(state.action){
@@ -44,13 +56,14 @@ function draw(){
     const note=node('textarea','');note.value=state.suggested;note.maxLength=800;note.setAttribute('aria-label','Edit suggested next step');
     box.append(node('p','Mira’s suggestion'),note,control('Save this step',()=>{if(!note.value.trim())return;state.action=note.value.trim();state.suggested='';state.done=false;save();draw();sayStatus('Your next step is saved on this device.')}));
   }else if(!state.action)box.append(node('p','When you find something worth trying, you can save it here and come back to it.'));
+  if(caseMode)paintCasePrompts();
   el('contextTag').hidden=!state.contextName;el('contextTag').textContent=state.contextName;el('retry').hidden=!failed;paintMarket();lock(busy);
 }
 function lock(on){
   busy=on;const capturing=Boolean(recorder);
   for(const id of ['send','lang','discuss','restart','listen','sample','posting','message']) el(id).disabled=on||capturing;
   el('mic').disabled=on&&!capturing;
-  for(const b of document.querySelectorAll('#starters button,.market button')) b.disabled=on||capturing;
+  for(const b of document.querySelectorAll('#starters button,#casePrompts button,.market button')) b.disabled=on||capturing;
 }
 async function api(route,data){
   const response=await fetch('/api/'+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(28000)});
@@ -90,7 +103,7 @@ for(const [i,s] of samples.entries())el('sample').append(new Option(s.role,i));
 el('sample').onchange=e=>{if(e.target.value!==''){state.opening=samples[Number(e.target.value)].copy;el('posting').value=state.opening;save()}};
 el('posting').oninput=e=>{state.opening=e.target.value;save()};
 el('discuss').onclick=()=>{if(state.opening.trim().length<20){sayStatus('Add a job description first.');return}send(greetings[state.language][3])};
-el('restart').onclick=()=>{if(!confirm('Clear this conversation and saved action on this device?'))return;stopAudio();state=blank();voiceMode=false;failed=false;el('sample').value='';save();draw();sayStatus('Ready for a new conversation.')};
+el('restart').onclick=()=>{if(!confirm('Clear this conversation and saved action on this device?'))return;stopAudio();state=initialState();voiceMode=false;failed=false;el('sample').value='';save();draw();sayStatus('Ready for a new conversation.')};
 el('mic').onclick=async()=>{
   if(recorder){if(recorder.state==='recording')recorder.stop();return}
   if(busy)return;stopAudio();lock(true);let stream;
@@ -105,10 +118,10 @@ el('mic').onclick=async()=>{
       try{
         const blob=new Blob(chunks,{type:format});const data=await new Promise((resolve,reject)=>{const f=new FileReader();f.onload=()=>resolve(f.result.split(',')[1]);f.onerror=reject;f.readAsDataURL(blob)});
         const {text}=await api('voice',{operation:'listen',language:state.language,audio:data,mime:format});
-        lock(false);voiceMode=true;await send(text);
+        lock(false);voiceMode=true;state.draft=text.slice(0,1500);save();el('message').value=state.draft;el('message').focus();sayStatus('Check the transcript, then tap Send. Mira will reply aloud.');
       }catch{lock(false);sayStatus('Couldn’t transcribe that. Try a shorter recording or type your reply.')}
     };
-    recorder.start();lock(false);voiceMode=true;document.body.classList.add('recording');el('mic').textContent='Finish speaking';sayStatus('Listening for up to 25 seconds. Tap Finish speaking to send.');timer=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},25000);
+    recorder.start();lock(false);voiceMode=true;document.body.classList.add('recording');el('mic').textContent='Finish speaking';sayStatus('Listening for up to 25 seconds. Tap Finish speaking to review your words.');timer=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},25000);
   }catch{stream?.getTracks().forEach(t=>t.stop());recorder=null;lock(false);sayStatus('Microphone unavailable. Allow microphone access in your browser or type your reply.')}
 };
 failed=state.turns.at(-1)?.role==='user';
@@ -130,6 +143,19 @@ function openCoach(context,name,prompt){
   state.opening=context;state.contextName=name;save();
   el('coachPanel').scrollIntoView({behavior:'smooth',block:'start'});
   send(prompt);
+}
+function paintCasePrompts(){
+  const host=el('casePrompts');
+  host.hidden=false;host.replaceChildren();
+  const suggestions=state.turns.length?[
+    ['Change my hours','Actually, I need to finish by 4 pm every weekday and cannot work nights. Can either listing confirm those hours?'],
+    ['Draft my recruiter question','Write one short question I can send to clarify the scheduling uncertainty.'],
+    ['Test the skill for free','I cannot spend money. Give me one small dispatch exercise I can try now and wait for my answer.']
+  ]:[
+    ['I need day shifts','I work in retail in Bengaluru. I need day shifts and fewer customer calls. Which of these two jobs should I explore first, and why?'],
+    ['I enjoy customer calls','I enjoy handling customer complaints and I can work rotating nights. Which of these two jobs should I explore first, and why?']
+  ];
+  for(const [label,prompt] of suggestions)host.append(control(label,()=>send(prompt),'chip'));
 }
 function paintMarket(){
   const surface=state.surface, ids=state.shortlist;
@@ -168,6 +194,28 @@ function paintMarket(){
   wrap.append(control(kind==='compare'?'Compare with Mira':'Compare learning options',()=>{
     openCoach(kind==='compare'?compareText(jobIds):compareText(['excel','ops']),kind==='compare'?'My shortlist · Job comparison':'Learning · Free or paid',kind==='compare'?'Compare my saved jobs. What is the biggest tradeoff for me?':'Compare these learning options and help me choose based on my goal and budget.');
   }),control('Dismiss',()=>{state.dismissed=kind;save();paintMarket()},'text'));host.append(wrap);
+}
+if(caseMode){
+  document.title='A shortlist, a shift, a decision · Daystep for Apna';
+  el('deskNav').textContent='Open career desk';el('deskNav').href='/';
+  const welcome=document.querySelector('.welcome');
+  welcome.querySelector('.eyebrow').textContent='HRITIK DATTA  /  APNA PRODUCT ASSIGNMENT';
+  welcome.querySelector('h1').innerHTML='Which shift fits<br> <em>your life?</em>';
+  welcome.querySelector('p:last-of-type').textContent='Try a retail worker’s shortlist. Dispatch runs 9 am–6 pm with occasional driver calls. Customer support involves inbound calls and rotating nights. Tell Mira what matters to you.';
+  document.querySelector('.heroLink').textContent='Choose a starting point';
+  const layout=document.querySelector('.layout'),market=document.querySelector('.market');
+  market.before(layout);
+  el('actionBox').parentElement.append(makeReviewLinks());
+  market.style.marginTop='20px';
+}
+function makeReviewLinks(){
+  const group=node('nav','','reviewLinks');
+  group.setAttribute('aria-label','Assignment materials');
+  group.append(node('h2','Inside the submission'));
+  for(const [title,path] of [['Product decisions & field notes','/product-decisions.html'],['Communication & engagement plan','/engagement-plan.html']]){
+    const link=node('a',title);link.href=path;group.append(link);
+  }
+  return group;
 }
 draw();
 

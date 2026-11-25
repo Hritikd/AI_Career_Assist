@@ -21,3 +21,8 @@
 **Business test.** Randomly offer eligible saved-job users the contextual prompt and compare seven-day completed actions per eligible user against the existing flow. Break out pursue, clarify, practice and intentional pass. Audit whether responses honour revised constraints and correctly distinguish the listings. For learning, compare qualified counsellor requests, eventual enrollment and cancellation while monitoring free-path completion and budget violations.
 
 **Illustrative unit economics.** Suppose 30% of eligible visitors start, a voice session costs ₹2 including recognition, generation and synthesis, and one incremental qualified application contributes ₹100. Break-even is a 0.6 percentage-point lift per eligible visitor before fixed costs. Track speech minutes, tokens, redos and paid conversions against a holdout. These figures are assumptions, not Apna economics.
+
+## Iteration evidence and field test
+Prototype walkthroughs exposed a three-click path to comparison, a Kannada transcription error, a coaching reply that overlooked a promised noon update, and a useful recruiter question without a save affordance. The submission now opens a prefilled shortlist, microphone transcripts are editable, the rehearsal prompt asks one grounded follow-up, and any reply can become an editable action. These observations came from prototype tests. Candidate interviews are pending.
+
+Recruit five early-career workers with two actual openings. Capture their intended next action before the session, observe whether they correct the coach and explain their decision afterward, and ask one week later which action they took. Use a randomized pilot to estimate incremental impact.
